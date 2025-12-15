@@ -28,6 +28,7 @@
 
 // Set the sonar reading parameters
 #define WAIT_TIME 100 // in ms
+#define STOP_TIME 50 // in ms
 #define READ_ROUNDS 5
 
 void setup() {
@@ -38,6 +39,11 @@ void setup() {
     pinMode(L_PWM, OUTPUT);
     pinMode(L_IN2, OUTPUT);
     pinMode(L_IN1, OUTPUT);
+    //Stop motors at the beginning
+    stopMotor();
+    //Setup Serial port
+    Serial.begin(9600);
+    Serial.println("Task Straight Start");
 }
 
 unsigned int getSonarDistance(NewPing &sonar) {
@@ -78,6 +84,7 @@ int setMotorSpeed(const int pin1, const int pin2, const int PMW, const int speed
     return setSpeed;
 }
 
+// Stop both motors
 void stopMotor() {
     setMotorSpeed(L_IN1, L_IN2, L_PWM, 0);
     setMotorSpeed(R_IN1, R_IN2, R_PWM, 0);
@@ -100,10 +107,12 @@ void setMotor(const int left_speed, const int right_speed) {
     Serial.println(rightSpeed);
 }
 
+// Get the error distance from the safe distance
 int getErrorDistance(const unsigned int Distance){
     return Distance - SAFE_DISTANCE;
 }
 
+// Get different gear based on the error distance
 int getDifferentGear(const int errorDistance) {
     int differentGear = (errorDistance * BASED_DIFFERENT_GEAR) / SAFE_DISTANCE;
     if (differentGear > BASED_DIFFERENT_GEAR) {
@@ -112,11 +121,13 @@ int getDifferentGear(const int errorDistance) {
     return differentGear;
 }
 
+// Check if there is an obstacle in front of the ship
 bool checkObstacle(const unsigned int frontDistance) {
     if ((frontDistance > 0 && frontDistance < SAFE_DISTANCE)) return true;
     return false;
 }
 
+// Move the ship based on the sonar distances
 void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
     int errorDistance = getErrorDistance(rightDistance);
     Serial.print("Error Distance: ");
@@ -158,4 +169,5 @@ void loop() {
     }
     Move(frontDistance, rightDistance);
     stopMotor();
+    delay(STOP_TIME);
 }
