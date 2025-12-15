@@ -18,6 +18,7 @@
             "includePath": [
                 "/home/tombird/.arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino",
                 "/home/tombird/.arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard",
+                "/home/tombird/Arduino/libraries/NewPing/src",
                 "/home/tombird/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/lib/gcc/avr/7.3.0/include",
                 "/home/tombird/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/lib/gcc/avr/7.3.0/include-fixed",
                 "/home/tombird/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include"

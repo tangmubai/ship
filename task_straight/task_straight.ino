@@ -1,3 +1,5 @@
+#include <NewPing.h>
+
 // Set the pin of left motor
 #define L_PWM 5
 #define L_IN1 6
@@ -6,14 +8,25 @@
 #define R_PWM 10
 #define R_IN1 8
 #define R_IN2 9
-// // Set the pin of front infrared sensor
-// #define F_IN1 A0
-// //Set the pin of left infrared sensor
-// #define L_INFR A1
+
 //Set the speed of motor
 #define MOTOR_BASED_SPEED 110
 #define MOTOR_MAX_SPEED 255
 #define MOTOR_DIFFERENT_GEAR 12
+
+// Set the front sensor pin
+#define FRONT_TRIGGER_PIN 11
+#define FRONT_ECHO_PIN 12
+// Set the right sensor pin
+#define RIGHT_TRIGGER_PIN 3
+#define RIGHT_ECHO_PIN 2
+
+//Set the distance of sensor
+#define SAFE_DISTANCE 20 // in cm
+#define MAX_DISTANCE 200 // in cm
+
+NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
+NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
 
 void setup() {
     //Setup motor pins
@@ -37,6 +50,13 @@ void setMotorSpeed(const int pin1, const int pin2, const int speed) {
         digitalWrite(pin1, LOW);
         digitalWrite(pin2, LOW);
     }
+}
+
+void stopMotor() {
+    setMotorSpeed(L_IN1, L_IN2, 0);
+    setMotorSpeed(L_IN1, L_IN2, 0);
+    analogWrite(L_PWM, 0);
+    analogWrite(R_PWM, 0);
 }
 
 // Set both motors direction
