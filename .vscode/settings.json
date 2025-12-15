@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.ino": "cpp"
+  },
+  "C_Cpp.default.cppStandard": "c++11"
+  ,
+  "arduino.useArduinoCli": true
+}

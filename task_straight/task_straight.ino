@@ -1,0 +1,65 @@
+// Set the pin of left motor
+#define L_PWM 5
+#define L_IN1 6
+#define L_IN2 7
+// Set the pin of right motor
+#define R_PWM 10
+#define R_IN1 8
+#define R_IN2 9
+// // Set the pin of front infrared sensor
+// #define F_IN1 A0
+// //Set the pin of left infrared sensor
+// #define L_INFR A1
+//Set the speed of motor
+#define MOTOR_BASED_SPEED 110
+#define MOTOR_MAX_SPEED 255
+#define MOTOR_DIFFERENT_GEAR 12
+
+void setup() {
+    //Setup motor pins
+    pinMode(R_PWM, OUTPUT);
+    pinMode(R_IN1, OUTPUT);
+    pinMode(R_IN2, OUTPUT);
+    pinMode(L_PWM, OUTPUT);
+    pinMode(L_IN2, OUTPUT);
+    pinMode(L_IN1, OUTPUT);
+}
+
+// Set motor direction
+void setMotorSpeed(const int pin1, const int pin2, const int speed) {
+    if (speed > 0) {
+        digitalWrite(pin1, LOW);
+        digitalWrite(pin2, HIGH);
+    } else if (speed < 0) {
+        digitalWrite(pin1, HIGH);
+        digitalWrite(pin2, LOW);
+    } else {
+        digitalWrite(pin1, LOW);
+        digitalWrite(pin2, LOW);
+    }
+}
+
+// Set both motors direction
+void setMotor(const int left_speed, const int right_speed) {
+    int leftSpeed = constrain(left_speed, -MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
+    int rightSpeed = constrain(right_speed, -MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
+    //Set left motor direction
+    setMotorSpeed(L_IN1, L_IN2, leftSpeed);
+    //Set right motor direction
+    setMotorSpeed(L_IN1, L_IN2, leftSpeed);
+    //Limit speed to MOTOR_MAX_SPEED
+    if (leftSpeed > MOTOR_MAX_SPEED) {
+        leftSpeed = MOTOR_MAX_SPEED;
+    }
+    if (rightSpeed > MOTOR_MAX_SPEED) {
+        rightSpeed = MOTOR_MAX_SPEED;
+    }
+    //Set motor speed
+    analogWrite(L_PWM, leftSpeed);
+    analogWrite(R_PWM, rightSpeed);
+}
+
+void loop() {
+    int left_speed = 0;
+    int right_speed = 0;
+}
