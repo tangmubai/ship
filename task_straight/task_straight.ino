@@ -165,6 +165,7 @@ void loop() {
     if (checkObstacle(frontDistance)) {
         Serial.println("Obstacle Detected");
         stopMotor();
+        delay(STOP_TIME);
         return ;
     }
     Move(frontDistance, rightDistance);
