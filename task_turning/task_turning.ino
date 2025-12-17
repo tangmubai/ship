@@ -15,11 +15,11 @@
 #define BASED_DIFFERENT_GEAR 12
 
 // Set the front sensor pin
-#define FRONT_TRIGGER_PIN 11
+#define FRONT_TRIGGER_PIN 13                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
 #define FRONT_ECHO_PIN 12
 // Set the right sensor pin
-#define RIGHT_TRIGGER_PIN 3
-#define RIGHT_ECHO_PIN 2
+#define RIGHT_TRIGGER_PIN 10
+#define RIGHT_ECHO_PIN 9
 
 //Set the distance of sensor
 #define FRONT_SAFE_DISTANCE 30 // in cm
@@ -130,7 +130,7 @@ bool checkObstacle(const unsigned int frontDistance) {
 }
 
 // Move the ship based on the sonar distances
-void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
+void MoveStraight(const unsigned int rightDistance) {
     int errorDistance = getErrorDistance(rightDistance);
     Serial.print("Error Distance: ");
     Serial.print(errorDistance);
@@ -170,7 +170,7 @@ void loop() {
         delay(STOP_TIME);
         return ;
     }
-    Move(frontDistance, rightDistance);
+    MoveStraight(rightDistance);
     stopMotor();
     delay(STOP_TIME);
 }

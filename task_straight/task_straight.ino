@@ -1,13 +1,13 @@
 #include <NewPing.h>
 
-// Set the pin of left motor
-#define L_PWM 3
-#define L_IN1 7
-#define L_IN2 6
 // Set the pin of right motor
-#define R_PWM 2
-#define R_IN3 5
-#define R_IN4 4
+#define L_PWM 2
+#define L_IN1 5
+#define L_IN2 4
+// Set the pin of left motor
+#define R_PWM 3
+#define R_IN3 7
+#define R_IN4 6
 
 //Set the speed of motor
 #define MOTOR_BASED_SPEED 100
@@ -150,10 +150,8 @@ void loop() {
     //     stopMotor();
     //     delay(STOP_TIME);
     //     return ;
-    // }    
-    while(233) {
-        digitalWrite(L_IN1, LOW);
-        digitalWrite(L_IN2, HIGH);
-        analogWrite(L_PWM, 50);
-    }
+    // }
+    Move();
+    stopMotor();
+    delay(STOP_TIME);
 }
