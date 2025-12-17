@@ -1,22 +1,22 @@
 #include <NewPing.h>
 
 // Set the pin of left motor
-#define L_PWM 9
-#define L_IN1 13
-#define L_IN2 12
+#define L_PWM 3
+#define L_IN1 7
+#define L_IN2 6
 // Set the pin of right motor
-#define R_PWM 8
-#define R_IN1 11
-#define R_IN2 10
+#define R_PWM 2
+#define R_IN3 5
+#define R_IN4 4
 
 //Set the speed of motor
-#define MOTOR_BASED_SPEED 110
+#define MOTOR_BASED_SPEED 100
 #define MOTOR_MAX_SPEED 255
 #define BASED_DIFFERENT_GEAR 12
 
 // Set the front sensor pin
-#define FRONT_TRIGGER_PIN 11
-#define FRONT_ECHO_PIN 12
+// #define FRONT_TRIGGER_PIN 11
+// #define FRONT_ECHO_PIN 12
 // Set the right sensor pin
 #define RIGHT_TRIGGER_PIN 3
 #define RIGHT_ECHO_PIN 2
@@ -34,35 +34,36 @@
 void setup() {
     //Setup motor pins
     pinMode(R_PWM, OUTPUT);
-    pinMode(R_IN1, OUTPUT);
-    pinMode(R_IN2, OUTPUT);
+    pinMode(R_IN3, OUTPUT);
+    pinMode(R_IN4, OUTPUT);
     pinMode(L_PWM, OUTPUT);
     pinMode(L_IN2, OUTPUT);
     pinMode(L_IN1, OUTPUT);
     //Stop motors at the beginning
-    stopMotor();
+    // stopMotor();
     //Setup Serial port
     Serial.begin(9600);
     Serial.println("Task Straight Start");
+
 }
 
-unsigned int getSonarDistance(NewPing &sonar) {
-    unsigned int sumDistance = 0;
-    int vailadReadings = 0;
-    for (int i = 0; i < READ_ROUNDS; i++) {
-        unsigned int distance = sonar.ping_cm();
-        if (distance >= 0) {
-            sumDistance += distance;
-            vailadReadings++;
-        }
-        delay(WAIT_TIME); //Short delay between readings
-    }
-    int distance = -1;
-    if (vailadReadings > 0) {
-        distance = sumDistance / vailadReadings;
-    }
-    return distance;
-}
+// unsigned int getSonarDistance(NewPing &sonar) {
+//     unsigned int sumDistance = 0;
+//     int vailadReadings = 0;
+//     for (int i = 0; i < READ_ROUNDS; i++) {
+//         unsigned int distance = sonar.ping_cm();
+//         if (distance >= 0) {
+//             sumDistance += distance;
+//             vailadReadings++;
+//         }
+//         delay(WAIT_TIME); //Short delay between readings
+//     }
+//     int distance = -1;
+//     if (vailadReadings > 0) {
+//         distance = sumDistance / vailadReadings;
+//     }
+//     return distance;
+// }
 
 // Set motor direction
 int setMotorSpeed(const int pin1, const int pin2, const int PMW, const int speed) {
@@ -80,14 +81,14 @@ int setMotorSpeed(const int pin1, const int pin2, const int PMW, const int speed
     if (setSpeed > MOTOR_MAX_SPEED) {
         setSpeed = MOTOR_MAX_SPEED;
     }
-    digitalWrite(PMW, setSpeed);
+    analogWrite(PMW, setSpeed);
     return setSpeed;
 }
 
 // Stop both motors
 void stopMotor() {
     setMotorSpeed(L_IN1, L_IN2, L_PWM, 0);
-    setMotorSpeed(R_IN1, R_IN2, R_PWM, 0);
+    setMotorSpeed(R_IN3, R_IN4, R_PWM, 0);
     analogWrite(L_PWM, 0);
     analogWrite(R_PWM, 0);
 }
@@ -99,7 +100,7 @@ void setMotor(const int left_speed, const int right_speed) {
     //Set left motor direction
     leftSpeed = setMotorSpeed(L_IN1, L_IN2, L_PWM, leftSpeed);
     //Set right motor direction
-    rightSpeed = setMotorSpeed(R_IN1, R_IN2, R_PWM, rightSpeed);
+    rightSpeed = setMotorSpeed(R_IN3, R_IN4, R_PWM, rightSpeed);
     //Limit speed to MOTOR_MAX_SPEED
     Serial.print("Left Motor Speed: ");
     Serial.print(leftSpeed);
@@ -149,7 +150,10 @@ void loop() {
     //     stopMotor();
     //     delay(STOP_TIME);
     //     return ;
-    // }
-    Move();
-    delay(STOP_TIME);
+    // }    
+    while(233) {
+        digitalWrite(L_IN1, LOW);
+        digitalWrite(L_IN2, HIGH);
+        analogWrite(L_PWM, 50);
+    }
 }

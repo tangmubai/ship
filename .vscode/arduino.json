@@ -1,4 +1,5 @@
 {
     "board": "arduino:avr:uno",
-    "sketch": "task_straight/task_straight.ino"
+    "sketch": "test/test.ino",
+    "port": "/dev/ttyUSB0"
 }

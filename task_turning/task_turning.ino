@@ -1,13 +1,13 @@
 #include <NewPing.h>
 
 // Set the pin of left motor
-#define L_PWM 9
-#define L_IN1 13
-#define L_IN2 12
+#define L_PWM 3
+#define L_IN1 7
+#define L_IN2 6
 // Set the pin of right motor
-#define R_PWM 8
-#define R_IN1 11
-#define R_IN2 10
+#define R_PWM 2
+#define R_IN3 5
+#define R_IN4 4
 
 //Set the speed of motor
 #define MOTOR_BASED_SPEED 110
@@ -22,6 +22,7 @@
 #define RIGHT_ECHO_PIN 2
 
 //Set the distance of sensor
+#define FRONT_SAFE_DISTANCE 30 // in cm
 #define SAFE_DISTANCE 20 // in cm
 #define MAX_DISTANCE 200 // in cm
 #define TOLLRENT_DISTANCE 10 // in cm
@@ -34,8 +35,8 @@
 void setup() {
     //Setup motor pins
     pinMode(R_PWM, OUTPUT);
-    pinMode(R_IN1, OUTPUT);
-    pinMode(R_IN2, OUTPUT);
+    pinMode(R_IN3, OUTPUT);
+    pinMode(R_IN4, OUTPUT);
     pinMode(L_PWM, OUTPUT);
     pinMode(L_IN2, OUTPUT);
     pinMode(L_IN1, OUTPUT);
@@ -46,6 +47,7 @@ void setup() {
     Serial.println("Task Straight Start");
 }
 
+// Get the distance from sonar
 unsigned int getSonarDistance(NewPing &sonar) {
     unsigned int sumDistance = 0;
     int vailadReadings = 0;
@@ -80,14 +82,14 @@ int setMotorSpeed(const int pin1, const int pin2, const int PMW, const int speed
     if (setSpeed > MOTOR_MAX_SPEED) {
         setSpeed = MOTOR_MAX_SPEED;
     }
-    digitalWrite(PMW, setSpeed);
+    analogWrite(PMW, setSpeed);
     return setSpeed;
 }
 
 // Stop both motors
 void stopMotor() {
     setMotorSpeed(L_IN1, L_IN2, L_PWM, 0);
-    setMotorSpeed(R_IN1, R_IN2, R_PWM, 0);
+    setMotorSpeed(R_IN3, R_IN4, R_PWM, 0);
     analogWrite(L_PWM, 0);
     analogWrite(R_PWM, 0);
 }
@@ -99,7 +101,7 @@ void setMotor(const int left_speed, const int right_speed) {
     //Set left motor direction
     leftSpeed = setMotorSpeed(L_IN1, L_IN2, L_PWM, leftSpeed);
     //Set right motor direction
-    rightSpeed = setMotorSpeed(R_IN1, R_IN2, R_PWM, rightSpeed);
+    rightSpeed = setMotorSpeed(R_IN3, R_IN4, R_PWM, rightSpeed);
     //Limit speed to MOTOR_MAX_SPEED
     Serial.print("Left Motor Speed: ");
     Serial.print(leftSpeed);
@@ -123,7 +125,7 @@ int getDifferentGear(const int errorDistance) {
 
 // Check if there is an obstacle in front of the ship
 bool checkObstacle(const unsigned int frontDistance) {
-    if ((frontDistance > 0 && frontDistance < SAFE_DISTANCE)) return true;
+    if ((frontDistance > 0 && frontDistance < FRONT_SAFE_DISTANCE)) return true;
     return false;
 }
 
