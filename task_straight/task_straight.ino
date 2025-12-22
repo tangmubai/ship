@@ -2,12 +2,12 @@
 
 // Set the pin of right motor
 #define L_PWM 2
-#define L_IN1 5
-#define L_IN2 4
+#define L_IN1 4
+#define L_IN2 5
 // Set the pin of left motor
 #define R_PWM 3
-#define R_IN3 7
-#define R_IN4 6
+#define R_IN3 6
+#define R_IN4 7
 
 //Set the speed of motor
 #define MOTOR_BASED_SPEED 100
@@ -130,7 +130,16 @@ void setMotor(const int left_speed, const int right_speed) {
 
 // Move the ship based on the sonar distances
 void Move() {
-    setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
+    // for (int speed = 150; speed <= MOTOR_MAX_SPEED; speed++) {
+    //     Serial.print("Setting motors to speed: ");
+    //     Serial.println(speed);
+    //     setMotor(speed, speed);
+    //     delay(200);
+    // }
+    while (true) {
+        setMotor(MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
+    }
+    stopMotor();
 }
 
 void loop() {

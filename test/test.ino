@@ -3,13 +3,13 @@
 
 //left motor
 #define A_PWM 3
-#define A_IN1 7
-#define A_IN2 6
+#define A_IN1 6
+#define A_IN2 7
 
 //right motor
 #define B_PWM 2
-#define B_IN1 5
-#define B_IN2 4
+#define B_IN1 4
+#define B_IN2 5
 
 
 //电机停止
@@ -83,16 +83,14 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  for (int i = -250; i <= 250; i++) {
-    setMotors(i, i);
-    delay(10);
-    Serial.println(i);
+  for (int speed = 150; speed <= 255; speed++) {
+    Serial.print("Setting motors to speed: ");
+    Serial.println(speed);
+    setMotors(speed, speed);
+    delay(200);
   }
-  for (int i = 250; i >= -250; i--) {
-    setMotors(i, i);
-    delay(10);
-    Serial.println(i);
+  while (true) {
+    setMotors(255, 255);
   }
-  delay(1000);
   stopMotors();
 }
