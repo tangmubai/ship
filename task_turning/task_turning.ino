@@ -1,18 +1,19 @@
 #include <NewPing.h>
 
-// Set the pin of left motor
-#define L_PWM 3
-#define L_IN1 7
-#define L_IN2 6
 // Set the pin of right motor
-#define R_PWM 2
-#define R_IN3 5
-#define R_IN4 4
+#define L_PWM 2
+#define L_IN1 4
+#define L_IN2 5
+// Set the pin of left motor
+#define R_PWM 3
+#define R_IN3 6
+#define R_IN4 7
 
 //Set the speed of motor
-#define MOTOR_BASED_SPEED 110
+#define MOTOR_BASED_SPEED 250
 #define MOTOR_MAX_SPEED 255
-#define BASED_DIFFERENT_GEAR 30
+#define BASED_DIFFERENT_GEAR 400
+#define TURNING_DIFFERENT_GEAR 0
 
 // Set the front sensor pin
 #define FRONT_TRIGGER_PIN 13                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -22,18 +23,19 @@
 #define RIGHT_ECHO_PIN 9
 
 //Set the distance of sensor
-#define FRONT_SAFE_DISTANCE 150 // in cm
+#define FRONT_SAFE_DISTANCE 80 // in cm
 #define SAFE_DISTANCE 20 // in cm
 #define MAX_DISTANCE 200 // in cm
-#define TOLLRENT_DISTANCE 10 // in cm
+#define TOLERANT_DISTANCE 10 // in cm
 
-#define MIN_TURN_TIME 300 // in ms
-#define MAX_TURN_TIME 1500 // in ms
+#define MIN_TURN_TIME 10 // in ms
+#define MAX_TURN_TIME 800 // in ms
 
 // Set the sonar reading parameters
-#define WAIT_TIME 100 // in ms
-#define STRAIGHT_STOP_TIME 50 // in ms
-#define TURNING_STOP_TIME 10 // in ms
+#define WAIT_TIME 5 // in ms
+#define STRAIGHT_STOP_TIME 200 // in ms
+#define ADAPTATION_STOP_TIME 50 // in ms
+#define TURNING_STOP_TIME 200 // in ms
 #define READ_ROUNDS 5
 
 unsigned long start;
@@ -54,23 +56,51 @@ void setup() {
     Serial.println("Task Straight Start");
 }
 
-// Get the distance from sonar
+// Get the distance from sonar using median filter
 unsigned int getSonarDistance(NewPing &sonar) {
-    unsigned int sumDistance = 0;
-    int vailadReadings = 0;
+    unsigned int readings[READ_ROUNDS];
+    int validReadings = 0;
+    
+    // Collect valid readings
     for (int i = 0; i < READ_ROUNDS; i++) {
         unsigned int distance = sonar.ping_cm();
-        if (distance >= 0) {
-            sumDistance += distance;
-            vailadReadings++;
+        if (distance > 0) {
+            readings[validReadings] = distance;
+            validReadings++;
         }
         delay(WAIT_TIME); //Short delay between readings
     }
-    int distance = -1;
-    if (vailadReadings > 0) {
-        distance = sumDistance / vailadReadings;
+    
+    // Return MAX_DISTANCE if no valid readings
+    if (validReadings == 0) {
+        return MAX_DISTANCE;
     }
-    return distance;
+    
+    // Sort readings to find median (simple bubble sort for small array)
+    for (int i = 0; i < validReadings - 1; i++) {
+        for (int j = 0; j < validReadings - i - 1; j++) {
+            if (readings[j] > readings[j + 1]) {
+                unsigned int temp = readings[j];
+                readings[j] = readings[j + 1];
+                readings[j + 1] = temp;
+            }
+        }
+    }
+    
+    // Get median value
+    unsigned int median;
+    if (validReadings % 2 == 0) {
+        median = (readings[validReadings / 2 - 1] + readings[validReadings / 2]) / 2;
+    } else {
+        median = readings[validReadings / 2];
+    }
+    
+    // If median is 0, return MAX_DISTANCE
+    if (median == 0) {
+        median = MAX_DISTANCE;
+    }
+    
+    return median;
 }
 
 // Set motor direction
@@ -132,10 +162,9 @@ int getDifferentGear(const int errorDistance) {
 
 // Check if there is an obstacle in front of the ship
 int checkObstacle(const unsigned int frontDistance, const unsigned int rightDistance) {
-    int frontGap = FRONT_SAFE_DISTANCE - (int)frontDistance; // >0 means still too close in front
     int rightError = getErrorDistance(rightDistance);
     bool frontClear = frontDistance >= FRONT_SAFE_DISTANCE;
-    bool rightAligned = abs(rightError) <= TOLLRENT_DISTANCE;
+    bool rightAligned = abs(rightError) <= TOLERANT_DISTANCE;
     if (!frontClear) return 0; // No obstacle
     if (!rightAligned) return 1; // Obstacle detected
     return 2; // Obstacle detected
@@ -147,8 +176,9 @@ void MoveStraight(const unsigned int rightDistance) {
     Serial.print("Error Distance: ");
     Serial.print(errorDistance);
     Serial.println(" cm");
-    if (abs(errorDistance) <= TOLLRENT_DISTANCE) {
+    if (abs(errorDistance) <= TOLERANT_DISTANCE) {
         setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
+        delay(STRAIGHT_STOP_TIME);
         Serial.println("Go Straight");
     } else {
         int differentGear = getDifferentGear(abs(errorDistance));
@@ -161,30 +191,31 @@ void MoveStraight(const unsigned int rightDistance) {
             setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + differentGear);
             Serial.println("Turn Right");
         }
+        delay(ADAPTATION_STOP_TIME);
+        stopMotor();
     }
-    stopMotor();
-    delay(STRAIGHT_STOP_TIME);
 }
+
 
 // Adaptive left turn that keeps pivoting until front is clear and right distance is reasonable
 void TurnLeft(const unsigned int frontDistance, const unsigned int rightDistance) {
     int frontGap = FRONT_SAFE_DISTANCE - (int)frontDistance; // >0 means still too close in front
     int rightError = getErrorDistance(rightDistance);
-    int turnBoost = getDifferentGear(abs(rightError));
+    int turnBoost = 0;
 
-    if (frontGap > 0) {
-        // If front is still blocked, add extra pivot power
-        turnBoost = constrain(turnBoost + BASED_DIFFERENT_GEAR, 0, MOTOR_MAX_SPEED - MOTOR_BASED_SPEED);
-    }
+    // if (frontGap > 0) {
+    //     // If front is still blocked, add extra pivot power
+    //     turnBoost = constrain(turnBoost + BASED_DIFFERENT_GEAR, 0, MOTOR_MAX_SPEED - MOTOR_BASED_SPEED);
+    // }
 
-    setMotor(-MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + turnBoost);
+    setMotor(0, MOTOR_BASED_SPEED - TURNING_DIFFERENT_GEAR + turnBoost);
     Serial.print("Turning Left. Front Gap: ");
     Serial.print(frontGap);
     Serial.print(" cm, Right Error: ");
     Serial.print(rightError);
     Serial.println(" cm");
-    stopMotor();
-    delay(TURNING_STOP_TIME);
+    // delay(TURNING_STOP_TIME);
+    // stopMotor();
 }
 
 void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
@@ -199,14 +230,14 @@ void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
             turning = false;
             return ;
         }
-        if (status == 2) {
+        if (status) {
             turning = false;
             return ;
         }
         TurnLeft(frontDistance, rightDistance);
         return ;
     }
-    if (status == 0) {
+    if (status) {
         MoveStraight(rightDistance);
         return ;
     }
@@ -222,6 +253,7 @@ void loop() {
     NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
     unsigned int frontDistance = getSonarDistance(sonarFront);
     unsigned int rightDistance = getSonarDistance(sonarRight);
+    Serial.print("Front Distance: ");
     Serial.print(frontDistance);
     Serial.print(" cm\t");
     Serial.print("Right Distance: ");
