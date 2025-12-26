@@ -1,19 +1,21 @@
 #include <NewPing.h>
 
 // Set the pin of right motor
-#define L_PWM 2
-#define L_IN1 4
+#define L_PWM 7
+#define L_IN1 6
 #define L_IN2 5
 // Set the pin of left motor
-#define R_PWM 3
-#define R_IN3 6
-#define R_IN4 7
+#define R_PWM 2
+#define R_IN3 3
+#define R_IN4 4
 
 //Set the speed of motor
-#define MOTOR_BASED_SPEED 250
+#define MOTOR_BASED_SPEED 130
 #define MOTOR_MAX_SPEED 255
-#define BASED_DIFFERENT_GEAR 400
-#define TURNING_DIFFERENT_GEAR 0
+#define BASED_DIFFERENT_GEAR 0
+#define STRAIGHT_DIFFERENT_GEAR 40
+#define TURNING_DIFFERENT_GEAR 30
+#define TURNING_GEAR_BOOST 10
 
 // Set the front sensor pin
 #define FRONT_TRIGGER_PIN 13                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -23,10 +25,10 @@
 #define RIGHT_ECHO_PIN 9
 
 //Set the distance of sensor
-#define FRONT_SAFE_DISTANCE 80 // in cm
-#define SAFE_DISTANCE 20 // in cm
+#define FRONT_SAFE_DISTANCE 35 // in cm
+#define SAFE_DISTANCE 15 // in cm
 #define MAX_DISTANCE 200 // in cm
-#define TOLERANT_DISTANCE 10 // in cm
+#define TOLERANT_DISTANCE 8 // in cm
 
 #define MIN_TURN_TIME 10 // in ms
 #define MAX_TURN_TIME 800 // in ms
@@ -34,8 +36,8 @@
 // Set the sonar reading parameters
 #define WAIT_TIME 5 // in ms
 #define STRAIGHT_STOP_TIME 200 // in ms
-#define ADAPTATION_STOP_TIME 50 // in ms
-#define TURNING_STOP_TIME 200 // in ms
+#define ADAPTATION_STOP_TIME 20 // in ms
+#define TURNING_STOP_TIME 20 // in ms
 #define READ_ROUNDS 5
 
 unsigned long start;
@@ -53,7 +55,7 @@ void setup() {
     stopMotor();
     //Setup Serial port
     Serial.begin(9600);
-    Serial.println("Task Straight Start");
+    Serial.println("Task Turning Start");
 }
 
 // Get the distance from sonar using median filter
@@ -152,12 +154,12 @@ int getErrorDistance(const unsigned int Distance){
 }
 
 // Get different gear based on the error distance
-int getDifferentGear(const int errorDistance) {
-    int differentGear = (errorDistance * BASED_DIFFERENT_GEAR) / SAFE_DISTANCE;
-    if (differentGear > BASED_DIFFERENT_GEAR) {
-        differentGear = BASED_DIFFERENT_GEAR;
+int getDifferentGear(const int errorDistance, const int differentGear, const int safeDistance) {
+    int calculatedGear = (errorDistance * differentGear) / safeDistance;
+    if (calculatedGear > differentGear) {
+        calculatedGear = differentGear;
     }
-    return differentGear;
+    return calculatedGear;
 }
 
 // Check if there is an obstacle in front of the ship
@@ -181,7 +183,7 @@ void MoveStraight(const unsigned int rightDistance) {
         delay(STRAIGHT_STOP_TIME);
         Serial.println("Go Straight");
     } else {
-        int differentGear = getDifferentGear(abs(errorDistance));
+        int differentGear = getDifferentGear(abs(errorDistance), STRAIGHT_DIFFERENT_GEAR, SAFE_DISTANCE);
         Serial.print("Different Gear: ");
         Serial.println(differentGear);
         if (errorDistance > 0) {
@@ -192,7 +194,7 @@ void MoveStraight(const unsigned int rightDistance) {
             Serial.println("Turn Right");
         }
         delay(ADAPTATION_STOP_TIME);
-        stopMotor();
+        // stopMotor();
     }
 }
 
@@ -200,21 +202,14 @@ void MoveStraight(const unsigned int rightDistance) {
 // Adaptive left turn that keeps pivoting until front is clear and right distance is reasonable
 void TurnLeft(const unsigned int frontDistance, const unsigned int rightDistance) {
     int frontGap = FRONT_SAFE_DISTANCE - (int)frontDistance; // >0 means still too close in front
-    int rightError = getErrorDistance(rightDistance);
-    int turnBoost = 0;
-
-    // if (frontGap > 0) {
-    //     // If front is still blocked, add extra pivot power
-    //     turnBoost = constrain(turnBoost + BASED_DIFFERENT_GEAR, 0, MOTOR_MAX_SPEED - MOTOR_BASED_SPEED);
-    // }
-
-    setMotor(0, MOTOR_BASED_SPEED - TURNING_DIFFERENT_GEAR + turnBoost);
+    int turnBoost = getDifferentGear(abs(frontGap), TURNING_DIFFERENT_GEAR, FRONT_SAFE_DISTANCE);
+    setMotor(-MOTOR_BASED_SPEED - turnBoost + TURNING_GEAR_BOOST, MOTOR_BASED_SPEED + turnBoost);
     Serial.print("Turning Left. Front Gap: ");
     Serial.print(frontGap);
-    Serial.print(" cm, Right Error: ");
-    Serial.print(rightError);
+    Serial.print(" cm, Turn Boost: ");
+    Serial.print(turnBoost);
     Serial.println(" cm");
-    // delay(TURNING_STOP_TIME);
+    delay(TURNING_STOP_TIME);
     // stopMotor();
 }
 
@@ -260,4 +255,5 @@ void loop() {
     Serial.print(rightDistance);
     Serial.println(" cm");
     Move(frontDistance, rightDistance);
+    // MoveStraight(rightDistance);
 }

@@ -1,18 +1,18 @@
 #include <NewPing.h>
 
 // Set the pin of right motor
-#define L_PWM 2
-#define L_IN1 4
+#define L_PWM 7
+#define L_IN1 6
 #define L_IN2 5
 // Set the pin of left motor
-#define R_PWM 3
-#define R_IN3 6
-#define R_IN4 7
+#define R_PWM 2
+#define R_IN3 3
+#define R_IN4 4
 
 //Set the speed of motor
-#define MOTOR_BASED_SPEED 100
+#define MOTOR_BASED_SPEED 130
 #define MOTOR_MAX_SPEED 255
-#define BASED_DIFFERENT_GEAR 12
+#define BASED_DIFFERENT_GEAR 80
 
 // Set the front sensor pin
 // #define FRONT_TRIGGER_PIN 11
@@ -95,8 +95,8 @@ void stopMotor() {
 
 // Set both motors direction
 void setMotor(const int left_speed, const int right_speed) {
-    int leftSpeed = constrain(left_speed, -MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
-    int rightSpeed = constrain(right_speed, -MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
+    int leftSpeed = constrain(left_speed, 0, MOTOR_MAX_SPEED);
+    int rightSpeed = constrain(right_speed, 0, MOTOR_MAX_SPEED);
     //Set left motor direction
     leftSpeed = setMotorSpeed(L_IN1, L_IN2, L_PWM, leftSpeed);
     //Set right motor direction
@@ -137,7 +137,7 @@ void Move() {
     //     delay(200);
     // }
     while (true) {
-        setMotor(MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
+        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
     }
     stopMotor();
 }
