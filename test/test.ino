@@ -89,8 +89,6 @@ void loop() {
     setMotors(speed, speed);
     delay(200);
   }
-  while (true) {
-    setMotors(255, 255);
-  }
+  setMotors(255, 255);
   stopMotors();
 }

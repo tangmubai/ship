@@ -10,7 +10,7 @@
 #define R_IN4 4
 
 //Set the speed of motor
-#define MOTOR_BASED_SPEED 130
+#define MOTOR_BASED_SPEED 250
 #define MOTOR_MAX_SPEED 255
 #define BASED_DIFFERENT_GEAR 80
 

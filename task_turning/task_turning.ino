@@ -13,9 +13,9 @@
 #define MOTOR_BASED_SPEED 130
 #define MOTOR_MAX_SPEED 255
 #define BASED_DIFFERENT_GEAR 0
-#define STRAIGHT_DIFFERENT_GEAR 40
-#define TURNING_DIFFERENT_GEAR 30
-#define TURNING_GEAR_BOOST 10
+#define STRAIGHT_DIFFERENT_GEAR 80
+#define TURNING_DIFFERENT_GEAR 50
+#define TURNING_GEAR_BOOST 30
 
 // Set the front sensor pin
 #define FRONT_TRIGGER_PIN 13                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -25,19 +25,20 @@
 #define RIGHT_ECHO_PIN 9
 
 //Set the distance of sensor
-#define FRONT_SAFE_DISTANCE 35 // in cm
-#define SAFE_DISTANCE 15 // in cm
+#define FRONT_SAFE_DISTANCE 70 // in cm
+#define SAFE_DISTANCE 20 // in cm
 #define MAX_DISTANCE 200 // in cm
-#define TOLERANT_DISTANCE 8 // in cm
+#define LEFT_TOLERANT_DISTANCE 15 // in cm
+#define RIGHT_TOLERANT_DISTANCE 15 // in cm
 
 #define MIN_TURN_TIME 10 // in ms
-#define MAX_TURN_TIME 800 // in ms
+#define MAX_TURN_TIME 200 // in ms
 
 // Set the sonar reading parameters
 #define WAIT_TIME 5 // in ms
 #define STRAIGHT_STOP_TIME 200 // in ms
-#define ADAPTATION_STOP_TIME 20 // in ms
-#define TURNING_STOP_TIME 20 // in ms
+#define ADAPTATION_STOP_TIME 5 // in ms
+#define TURNING_STOP_TIME 5 // in ms
 #define READ_ROUNDS 5
 
 unsigned long start;
@@ -166,9 +167,9 @@ int getDifferentGear(const int errorDistance, const int differentGear, const int
 int checkObstacle(const unsigned int frontDistance, const unsigned int rightDistance) {
     int rightError = getErrorDistance(rightDistance);
     bool frontClear = frontDistance >= FRONT_SAFE_DISTANCE;
-    bool rightAligned = abs(rightError) <= TOLERANT_DISTANCE;
+    bool rightAligned =  (rightError <= -LEFT_TOLERANT_DISTANCE) || (rightError >= RIGHT_TOLERANT_DISTANCE);
     if (!frontClear) return 0; // No obstacle
-    if (!rightAligned) return 1; // Obstacle detected
+    if (rightAligned) return 1; // Obstacle detected
     return 2; // Obstacle detected
 }
 
@@ -178,7 +179,7 @@ void MoveStraight(const unsigned int rightDistance) {
     Serial.print("Error Distance: ");
     Serial.print(errorDistance);
     Serial.println(" cm");
-    if (abs(errorDistance) <= TOLERANT_DISTANCE) {
+    if ((errorDistance >= -LEFT_TOLERANT_DISTANCE) && (errorDistance <= RIGHT_TOLERANT_DISTANCE)) {
         setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
         delay(STRAIGHT_STOP_TIME);
         Serial.println("Go Straight");
@@ -203,7 +204,7 @@ void MoveStraight(const unsigned int rightDistance) {
 void TurnLeft(const unsigned int frontDistance, const unsigned int rightDistance) {
     int frontGap = FRONT_SAFE_DISTANCE - (int)frontDistance; // >0 means still too close in front
     int turnBoost = getDifferentGear(abs(frontGap), TURNING_DIFFERENT_GEAR, FRONT_SAFE_DISTANCE);
-    setMotor(-MOTOR_BASED_SPEED - turnBoost + TURNING_GEAR_BOOST, MOTOR_BASED_SPEED + turnBoost);
+    setMotor(0, MOTOR_BASED_SPEED + TURNING_GEAR_BOOST + turnBoost);
     Serial.print("Turning Left. Front Gap: ");
     Serial.print(frontGap);
     Serial.print(" cm, Turn Boost: ");
