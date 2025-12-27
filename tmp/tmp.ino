@@ -17,6 +17,15 @@
 #define TURNING_DIFFERENT_GEAR 50
 #define TURNING_GEAR_BOOST 70
 
+// Heading alignment & correction cadence tuning
+#define HEADING_ALIGN_STEP_TIME 60 // in ms
+#define HEADING_DERIVATIVE_TOLERANCE 2 // in cm
+#define HEADING_MAX_ITERATIONS 3
+#define HEADING_ADJUST_OFFSET 20
+#define HEADING_DIFFERENT_GEAR 10
+#define CORRECTION_COOLDOWN_MS 200 // min spacing between corrections (prevent rapid alternation)
+#define CORRECTION_STABILITY_TIME 120 // hold steady after correction to let ship settle
+
 // Set the front sensor pin
 #define FRONT_TRIGGER_PIN 13
 #define FRONT_ECHO_PIN 12
@@ -43,6 +52,8 @@
 
 unsigned long start;
 bool turning = false;
+unsigned long lastCorrectionMs = 0;
+bool correctionNeeded = false;
 
 void setup() {
     //Setup motor pins
@@ -57,6 +68,40 @@ void setup() {
     //Setup Serial port
     Serial.begin(9600);
     Serial.println("Task Turning Start");
+}
+
+// Helper: read right distance quickly using same filtering
+unsigned int readRightDistance() {
+    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
+    return getSonarDistance(sonarRight);
+}
+
+// After a lateral correction, realign bow so the sensor faces perpendicular to shore
+void AlignHeading() {
+    for (int i = 0; i < HEADING_MAX_ITERATIONS; i++) {
+        // Run straight briefly and measure derivative of right distance
+        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_DIFFERENT_GEAR);
+        unsigned int r1 = readRightDistance();
+        delay(HEADING_ALIGN_STEP_TIME);
+        unsigned int r2 = readRightDistance();
+        int delta = (int)r2 - (int)r1; // >0: bow yawing outward, <0: inward
+        Serial.print("[AlignHeading] dRight: ");
+        Serial.println(delta);
+        if (abs(delta) <= HEADING_DERIVATIVE_TOLERANCE) {
+            // heading is sufficiently parallel to shore
+            break;
+        }
+        if (delta > 0) {
+            // Right distance increasing -> rotate right a bit to face inward
+            setMotor(MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET, MOTOR_BASED_SPEED);
+        } else {
+            // Right distance decreasing -> rotate left a bit to face outward
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET);
+        }
+        delay(HEADING_ALIGN_STEP_TIME);
+    }
+    lastCorrectionMs = millis();
+    correctionNeeded = false;
 }
 
 // Get the distance from sonar using median filter
@@ -179,27 +224,59 @@ void MoveStraight(const unsigned int rightDistance) {
     Serial.print("Error Distance: ");
     Serial.print(errorDistance);
     Serial.println(" cm");
-    if ((errorDistance >= -LEFT_TOLERANT_DISTANCE) && (errorDistance <= RIGHT_TOLERANT_DISTANCE)) {
+    
+    // Check if within acceptable band
+    bool withinBand = (errorDistance >= -LEFT_TOLERANT_DISTANCE) && (errorDistance <= RIGHT_TOLERANT_DISTANCE);
+    
+    if (withinBand) {
+        // Already aligned, go straight with slight right bias to maintain course
         setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
         delay(STRAIGHT_STOP_TIME);
-        Serial.println("Go Straight");
+        Serial.println("[MoveStraight] Go Straight (aligned)");
+        correctionNeeded = false;
     } else {
+        // Out of tolerance band - check cooldown to prevent rapid alternation
+        unsigned long nowMs = millis();
+        unsigned long timeSinceCorrection = nowMs - lastCorrectionMs;
+        
+        if (timeSinceCorrection < CORRECTION_COOLDOWN_MS && !correctionNeeded) {
+            // Still in cooldown period, hold steady without new correction
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+            delay(STRAIGHT_STOP_TIME);
+            Serial.println("[MoveStraight] Cooldown: hold straight");
+            return;
+        }
+        
+        // Apply correction
         int differentGear = getDifferentGear(abs(errorDistance), STRAIGHT_DIFFERENT_GEAR, SAFE_DISTANCE);
         Serial.print("Different Gear: ");
         Serial.println(differentGear);
+        
         if (errorDistance > 0) {
+            // Too far from right shore, turn right (away from shore)
             setMotor(MOTOR_BASED_SPEED + differentGear, MOTOR_BASED_SPEED);
-            Serial.println("Turn Right");
+            Serial.println("[MoveStraight] Correct Right");
         } else {
-            Serial.println("Turn Left");
+            // Too close to left shore, turn left (away from shore)
+            Serial.println("[MoveStraight] Correct Left");
             setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + differentGear);
-            // delay(100);
-            // setMotor(MOTOR_BASED_SPEED, MOTOR_MAX_SPEED);
         }
+        
         delay(ADAPTATION_STOP_TIME);
-        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
-        delay(ADAPTATION_STOP_TIME);
-        // stopMotor();
+        
+        // Hold steady after correction to let ship settle
+        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+        delay(CORRECTION_STABILITY_TIME);
+        Serial.println("[MoveStraight] Stability hold");
+        
+        // Mark that a correction was just applied
+        correctionNeeded = true;
+        lastCorrectionMs = millis();
+        
+        // Only align heading if error is significant (avoid over-tuning)
+        if (abs(errorDistance) > LEFT_TOLERANT_DISTANCE + 15) {
+            AlignHeading();
+        }
     }
 }
 

@@ -2,12 +2,12 @@
 #include <NewPing.h>
 
 //left motor
-#define A_PWM 3
-#define A_IN1 6
-#define A_IN2 7
+#define A_PWM 11
+#define A_IN1 7
+#define A_IN2 6
 
 //right motor
-#define B_PWM 2
+#define B_PWM 3
 #define B_IN1 4
 #define B_IN2 5
 
@@ -83,12 +83,13 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  for (int speed = 150; speed <= 255; speed++) {
-    Serial.print("Setting motors to speed: ");
-    Serial.println(speed);
-    setMotors(speed, speed);
-    delay(200);
-  }
-  setMotors(255, 255);
-  stopMotors();
+  // for (int speed = 150; speed <= 255; speed++) {
+  //   Serial.print("Setting motors to speed: ");
+  //   Serial.println(speed);
+  //   setMotors(spe;;;;;;;;;;...................../ed, speed);
+  //   delay(200);
+  // }
+  setMotors(0, 255);
+  // stopMotors();
 }
+

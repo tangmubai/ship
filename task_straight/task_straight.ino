@@ -1,13 +1,13 @@
 #include <NewPing.h>
 
 // Set the pin of right motor
-#define L_PWM 7
-#define L_IN1 6
-#define L_IN2 5
+#define L_PWM 11
+#define L_IN1 7
+#define L_IN2 6
 // Set the pin of left motor
-#define R_PWM 2
-#define R_IN3 3
-#define R_IN4 4
+#define R_PWM 3
+#define R_IN3 4
+#define R_IN4 5
 
 //Set the speed of motor
 #define MOTOR_BASED_SPEED 250
