@@ -208,12 +208,12 @@ int getDifferentGear(const int errorDistance, const int differentGear, const int
     return calculatedGear;
 }
 
-// Check if there is an obstacle in front of the ship
-int checkObstacle(const unsigned int frontDistance, const unsigned int rightDistance) {
+// Check if there is an obstacle in right of the ship
+int checkRightObstacle(const unsigned int frontDistance, const unsigned int rightDistance) {
     int rightError = getErrorDistance(rightDistance);
     bool frontClear = frontDistance >= FRONT_SAFE_DISTANCE;
     bool rightAligned =  (rightError <= -LEFT_TOLERANT_DISTANCE) || (rightError >= RIGHT_TOLERANT_DISTANCE);
-    if (!frontClear) return 0; // No obstacle
+    if (!frontClear) return false; // No obstacle
     if (rightAligned) return 1; // Obstacle detected
     return 2; // Obstacle detected
 }
@@ -296,7 +296,7 @@ void TurnLeft(const unsigned int frontDistance, const unsigned int rightDistance
 }
 
 void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
-    int status = checkObstacle(frontDistance, rightDistance);
+    bool status = frontDistance >= FRONT_SAFE_DISTANCE;
     if (turning) {
         unsigned long elapsed = millis() - start;
         if (elapsed <= MIN_TURN_TIME) {
@@ -326,8 +326,8 @@ void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
 
 void loop() {
     //get the distance from sonar
-    NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
-    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
+    NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); 
+    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
     unsigned int frontDistance = getSonarDistance(sonarFront);
     unsigned int rightDistance = getSonarDistance(sonarRight);
     Serial.print("Front Distance: ");

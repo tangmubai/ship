@@ -17,6 +17,21 @@
 #define TURNING_DIFFERENT_GEAR 50
 #define TURNING_GEAR_BOOST 70
 
+// Heading alignment & correction cadence tuning
+#define HEADING_ALIGN_STEP_TIME 60 // in ms
+#define HEADING_DERIVATIVE_TOLERANCE 2 // in cm
+#define HEADING_MAX_ITERATIONS 3
+#define HEADING_ADJUST_OFFSET 20
+#define HEADING_DIFFERENT_GEAR 10
+#define CORRECTION_COOLDOWN_MS 200 // min spacing between corrections (prevent rapid alternation)
+#define CORRECTION_STABILITY_TIME 120 // hold steady after correction to let ship settle
+// Deadband + hysteresis and graded correction thresholds
+#define LEFT_HYSTERESIS 5  // widen exit threshold on left to avoid chatter
+#define RIGHT_HYSTERESIS 5 // widen exit threshold on right to avoid chatter
+#define SMALL_ERR_CM 10    // <= small: gentle correction
+#define MEDIUM_ERR_CM 20   // <= medium: moderate correction
+#define MIN_DIFFERENT_GEAR 8 // minimum correction gear to be effective
+
 // Set the front sensor pin
 #define FRONT_TRIGGER_PIN 13
 #define FRONT_ECHO_PIN 12
@@ -43,6 +58,10 @@
 
 unsigned long start;
 bool turning = false;
+unsigned long lastCorrectionMs = 0;
+bool correctionNeeded = false;
+bool inDeadband = false; // track when we are within the allowed corridor
+int lastErrorSign = 0;   // track last correction direction to reduce flip-flop
 
 void setup() {
     //Setup motor pins
@@ -57,6 +76,40 @@ void setup() {
     //Setup Serial port
     Serial.begin(9600);
     Serial.println("Task Turning Start");
+}
+
+// Helper: read right distance quickly using same filtering
+unsigned int readRightDistance() {
+    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
+    return getSonarDistance(sonarRight);
+}
+
+// After a lateral correction, realign bow so the sensor faces perpendicular to shore
+void AlignHeading() {
+    for (int i = 0; i < HEADING_MAX_ITERATIONS; i++) {
+        // Run straight briefly and measure derivative of right distance
+        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_DIFFERENT_GEAR);
+        unsigned int r1 = readRightDistance();
+        delay(HEADING_ALIGN_STEP_TIME);
+        unsigned int r2 = readRightDistance();
+        int delta = (int)r2 - (int)r1; // >0: bow yawing outward, <0: inward
+        Serial.print("[AlignHeading] dRight: ");
+        Serial.println(delta);
+        if (abs(delta) <= HEADING_DERIVATIVE_TOLERANCE) {
+            // heading is sufficiently parallel to shore
+            break;
+        }
+        if (delta > 0) {
+            // Right distance increasing -> rotate right a bit to face inward
+            setMotor(MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET, MOTOR_BASED_SPEED);
+        } else {
+            // Right distance decreasing -> rotate left a bit to face outward
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET);
+        }
+        delay(HEADING_ALIGN_STEP_TIME);
+    }
+    lastCorrectionMs = millis();
+    correctionNeeded = false;
 }
 
 // Get the distance from sonar using median filter
@@ -163,12 +216,12 @@ int getDifferentGear(const int errorDistance, const int differentGear, const int
     return calculatedGear;
 }
 
-// Check if there is an obstacle in front of the ship
-int checkObstacle(const unsigned int frontDistance, const unsigned int rightDistance) {
+// Check if there is an obstacle in right of the ship
+int checkRightObstacle(const unsigned int frontDistance, const unsigned int rightDistance) {
     int rightError = getErrorDistance(rightDistance);
     bool frontClear = frontDistance >= FRONT_SAFE_DISTANCE;
     bool rightAligned =  (rightError <= -LEFT_TOLERANT_DISTANCE) || (rightError >= RIGHT_TOLERANT_DISTANCE);
-    if (!frontClear) return 0; // No obstacle
+    if (!frontClear) return false; // No obstacle
     if (rightAligned) return 1; // Obstacle detected
     return 2; // Obstacle detected
 }
@@ -179,27 +232,86 @@ void MoveStraight(const unsigned int rightDistance) {
     Serial.print("Error Distance: ");
     Serial.print(errorDistance);
     Serial.println(" cm");
-    if ((errorDistance >= -LEFT_TOLERANT_DISTANCE) && (errorDistance <= RIGHT_TOLERANT_DISTANCE)) {
+    // Deadband with hysteresis: enter with narrower band; exit only if we exceed wider band
+    bool withinEnterBand = (errorDistance >= -LEFT_TOLERANT_DISTANCE) && (errorDistance <= RIGHT_TOLERANT_DISTANCE);
+    bool exceedExitBand = (errorDistance < -LEFT_TOLERANT_DISTANCE - LEFT_HYSTERESIS) || (errorDistance > RIGHT_TOLERANT_DISTANCE + RIGHT_HYSTERESIS);
+
+    if (inDeadband) {
+        if (!exceedExitBand) {
+            // Stay in deadband: no correction, maintain slight right bias
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+            delay(STRAIGHT_STOP_TIME);
+            Serial.println("[MoveStraight] Deadband hold");
+            correctionNeeded = false;
+            return;
+        } else {
+            // Leave deadband only when we exceed widened thresholds
+            inDeadband = false;
+        }
+    } else if (withinEnterBand) {
+        // Enter deadband when we re-align within narrower thresholds
+        inDeadband = true;
         setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
         delay(STRAIGHT_STOP_TIME);
-        Serial.println("Go Straight");
-    } else {
-        int differentGear = getDifferentGear(abs(errorDistance), STRAIGHT_DIFFERENT_GEAR, SAFE_DISTANCE);
-        Serial.print("Different Gear: ");
-        Serial.println(differentGear);
-        if (errorDistance > 0) {
-            setMotor(MOTOR_BASED_SPEED + differentGear, MOTOR_BASED_SPEED);
-            Serial.println("Turn Right");
-        } else {
-            Serial.println("Turn Left");
-            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + differentGear);
-            // delay(100);
-            // setMotor(MOTOR_BASED_SPEED, MOTOR_MAX_SPEED);
+        Serial.println("[MoveStraight] Enter deadband");
+        correctionNeeded = false;
+        return;
+    }
+
+    {
+        // Out of tolerance band - check cooldown to prevent rapid alternation
+        unsigned long nowMs = millis();
+        unsigned long timeSinceCorrection = nowMs - lastCorrectionMs;
+        
+        if (timeSinceCorrection < CORRECTION_COOLDOWN_MS && !correctionNeeded) {
+            // Still in cooldown period, hold steady without new correction
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+            delay(STRAIGHT_STOP_TIME);
+            Serial.println("[MoveStraight] Cooldown: hold straight");
+            return;
         }
+        
+        // Apply graded correction based on deviation magnitude
+        int absErr = abs(errorDistance);
+        int differentGear;
+        if (absErr <= SMALL_ERR_CM) {
+            differentGear = STRAIGHT_DIFFERENT_GEAR / 2; // gentle
+        } else if (absErr <= MEDIUM_ERR_CM) {
+            differentGear = (STRAIGHT_DIFFERENT_GEAR * 3) / 4; // moderate
+        } else {
+            differentGear = STRAIGHT_DIFFERENT_GEAR; // strong
+        }
+        if (differentGear < MIN_DIFFERENT_GEAR) differentGear = MIN_DIFFERENT_GEAR;
+        Serial.print("Different Gear (graded): ");
+        Serial.println(differentGear);
+        
+        if (errorDistance > 0) {
+            // Too far from right shore, turn right (away from shore)
+            setMotor(MOTOR_BASED_SPEED + differentGear, MOTOR_BASED_SPEED);
+            Serial.println("[MoveStraight] Correct Right");
+            lastErrorSign = 1;
+        } else {
+            // Too close to left shore, turn left (away from shore)
+            Serial.println("[MoveStraight] Correct Left");
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + differentGear);
+            lastErrorSign = -1;
+        }
+        
         delay(ADAPTATION_STOP_TIME);
-        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
-        delay(ADAPTATION_STOP_TIME);
-        // stopMotor();
+        
+        // Hold steady after correction to let ship settle
+        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+        delay(CORRECTION_STABILITY_TIME);
+        Serial.println("[MoveStraight] Stability hold");
+        
+        // Mark that a correction was just applied
+        correctionNeeded = true;
+        lastCorrectionMs = millis();
+        
+        // Only align heading if error is significant (avoid over-tuning)
+        if (absErr > LEFT_TOLERANT_DISTANCE + 15) {
+            AlignHeading();
+        }
     }
 }
 
@@ -219,7 +331,7 @@ void TurnLeft(const unsigned int frontDistance, const unsigned int rightDistance
 }
 
 void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
-    int status = checkObstacle(frontDistance, rightDistance);
+    bool status = frontDistance >= FRONT_SAFE_DISTANCE;
     if (turning) {
         unsigned long elapsed = millis() - start;
         if (elapsed <= MIN_TURN_TIME) {
@@ -249,8 +361,8 @@ void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
 
 void loop() {
     //get the distance from sonar
-    NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
-    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
+    NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); 
+    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
     unsigned int frontDistance = getSonarDistance(sonarFront);
     unsigned int rightDistance = getSonarDistance(sonarRight);
     Serial.print("Front Distance: ");
