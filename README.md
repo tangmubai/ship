@@ -45,7 +45,7 @@ ship/
 
 ### 1. 克隆项目
 ```bash
-git clone <repository-url>
+git clone https://github.com/tangmubai/ship
 cd ship
 ```
 
@@ -87,4 +87,6 @@ arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:avr:uno task_straight/task_str
 
 ## 许可证
 
-本项目仅用于SJTU工程实践课程学习目的。
+本项目采用MIT许可证。详情请见[LICENSE](LICENSE)文件。
+
+您可以自由使用、修改和分发本项目代码，但必须保留原版权声明和许可证文本。
