@@ -16,6 +16,7 @@
 
 ```
 ship/
+├── LICENSE                   # 许可证
 ├── README.md                 # 项目说明文档
 ├── lib/
 │   └── README.md            # 库文件说明
@@ -23,6 +24,8 @@ ship/
 │   └── task_straight.ino    # 直线行驶任务代码
 ├── task_turning/
 │   └── task_turning.ino     # 绕圈行驶任务代码
+├── advanced/
+│   └── advanced.ino         # 基于速度的算法（不建议使用）
 └── test/
     └── test.ino             # 标准测试程序
 ```

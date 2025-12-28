@@ -10,12 +10,14 @@
 #define R_IN4 5
 
 //Set the speed of motor
-#define MOTOR_BASED_SPEED 150
+#define MOTOR_BASED_SPEED 180
 #define MOTOR_MAX_SPEED 255
-#define BASED_DIFFERENT_GEAR 30
-#define STRAIGHT_DIFFERENT_GEAR 20
+#define MOTOR_MIN_SPEED 130
+#define BASED_DIFFERENT_GEAR 20
+#define LEFT_STRAIGHT_DIFFERENT_GEAR 30
+#define RIGHT_STRAIGHT_DIFFERENT_GEAR 10
 #define TURNING_DIFFERENT_GEAR 50
-#define TURNING_GEAR_BOOST 70
+#define TURNING_GEAR_BOOST 50
 
 // Heading alignment & correction cadence tuning
 #define HEADING_ALIGN_STEP_TIME 60 // in ms
@@ -24,7 +26,7 @@
 #define HEADING_ADJUST_OFFSET 20
 #define HEADING_DIFFERENT_GEAR 10
 #define CORRECTION_COOLDOWN_MS 200 // min spacing between corrections (prevent rapid alternation)
-#define CORRECTION_STABILITY_TIME 120 // hold steady after correction to let ship settle
+#define CORRECTION_STABILITY_TIME 50 // hold steady after correction to let ship settle
 
 // Set the front sensor pin
 #define FRONT_TRIGGER_PIN 13
@@ -34,20 +36,20 @@
 #define RIGHT_ECHO_PIN 9
 
 //Set the distance of sensor
-#define FRONT_SAFE_DISTANCE 90 // in cm
-#define SAFE_DISTANCE 60 // in cm
+#define FRONT_SAFE_DISTANCE 120 // in cm
+#define FRONT_STOP_DISTANCE 90 // in cm
+#define SAFE_DISTANCE 40 // in cm
 #define MAX_DISTANCE 200 // in cm
-#define LEFT_TOLERANT_DISTANCE 10 // in cm
-#define RIGHT_TOLERANT_DISTANCE 30 // in cm
+#define LEFT_TOLERANT_DISTANCE 25 // in cm
+#define RIGHT_TOLERANT_DISTANCE 35 // in cm
 
-#define MIN_TURN_TIME 10 // in ms
-#define MAX_TURN_TIME 200 // in ms
+#define MAX_TURN_TIME 3000 // in ms
 
 // Set the sonar reading parameters
 #define WAIT_TIME 5 // in ms
 #define STRAIGHT_STOP_TIME 80 // in ms
 #define ADAPTATION_STOP_TIME 80 // in ms
-#define TURNING_STOP_TIME 5 // in ms
+#define TURNING_STOP_TIME 20 // in ms
 #define READ_ROUNDS 5
 
 unsigned long start;
@@ -164,9 +166,6 @@ int setMotorSpeed(const int pin1, const int pin2, const int PMW, const int speed
         digitalWrite(pin2, LOW);
     }
     int setSpeed = abs(speed);
-    if (setSpeed > MOTOR_MAX_SPEED) {
-        setSpeed = MOTOR_MAX_SPEED;
-    }
     analogWrite(PMW, setSpeed);
     return setSpeed;
 }
@@ -181,8 +180,8 @@ void stopMotor() {
 
 // Set both motors direction
 void setMotor(const int left_speed, const int right_speed) {
-    int leftSpeed = constrain(left_speed, -MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
-    int rightSpeed = constrain(right_speed, -MOTOR_MAX_SPEED, MOTOR_MAX_SPEED);
+    int leftSpeed = constrain(left_speed, 0, MOTOR_MAX_SPEED);
+    int rightSpeed = constrain(right_speed, 0, MOTOR_MAX_SPEED);
     //Set left motor direction
     leftSpeed = setMotorSpeed(L_IN1, L_IN2, L_PWM, leftSpeed);
     //Set right motor direction
@@ -208,18 +207,14 @@ int getDifferentGear(const int errorDistance, const int differentGear, const int
     return calculatedGear;
 }
 
-// Check if there is an obstacle in right of the ship
-int checkRightObstacle(const unsigned int frontDistance, const unsigned int rightDistance) {
-    int rightError = getErrorDistance(rightDistance);
-    bool frontClear = frontDistance >= FRONT_SAFE_DISTANCE;
-    bool rightAligned =  (rightError <= -LEFT_TOLERANT_DISTANCE) || (rightError >= RIGHT_TOLERANT_DISTANCE);
-    if (!frontClear) return false; // No obstacle
-    if (rightAligned) return 1; // Obstacle detected
-    return 2; // Obstacle detected
+// Check if there is an obstacle in front of the ship
+int checkObstacle(const unsigned int frontDistance) {
+    return frontDistance >= FRONT_SAFE_DISTANCE ? 1 : 0; // 1: clear, 0: obstacle
 }
 
 // Move the ship based on the sonar distances
 void MoveStraight(const unsigned int rightDistance) {
+
     int errorDistance = getErrorDistance(rightDistance);
     Serial.print("Error Distance: ");
     Serial.print(errorDistance);
@@ -248,13 +243,14 @@ void MoveStraight(const unsigned int rightDistance) {
         }
         
         // Apply correction
-        int differentGear = getDifferentGear(abs(errorDistance), STRAIGHT_DIFFERENT_GEAR, SAFE_DISTANCE);
+        int gear = (errorDistance > 0) ? RIGHT_STRAIGHT_DIFFERENT_GEAR : LEFT_STRAIGHT_DIFFERENT_GEAR;
+        int differentGear = getDifferentGear(abs(errorDistance), gear, SAFE_DISTANCE);
         Serial.print("Different Gear: ");
         Serial.println(differentGear);
         
         if (errorDistance > 0) {
             // Too far from right shore, turn right (away from shore)
-            setMotor(MOTOR_BASED_SPEED + differentGear, MOTOR_BASED_SPEED);
+            setMotor(MOTOR_BASED_SPEED + differentGear, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
             Serial.println("[MoveStraight] Correct Right");
         } else {
             // Too close to left shore, turn left (away from shore)
@@ -282,52 +278,55 @@ void MoveStraight(const unsigned int rightDistance) {
 
 
 // Adaptive left turn that keeps pivoting until front is clear and right distance is reasonable
-void TurnLeft(const unsigned int frontDistance, const unsigned int rightDistance) {
+void TurnLeft(const unsigned int frontDistance) {
     int frontGap = FRONT_SAFE_DISTANCE - (int)frontDistance; // >0 means still too close in front
-    int turnBoost = getDifferentGear(abs(frontGap), TURNING_DIFFERENT_GEAR, FRONT_SAFE_DISTANCE);
-    setMotor(0, MOTOR_BASED_SPEED + TURNING_GEAR_BOOST + turnBoost);
+    int turnBoost = (abs(frontGap) * (MOTOR_MAX_SPEED - MOTOR_BASED_SPEED - TURNING_GEAR_BOOST)) / FRONT_STOP_DISTANCE;
+    int leftSpeed = 0;
+    if (frontGap < FRONT_STOP_DISTANCE) {
+        leftSpeed = MOTOR_MIN_SPEED * (FRONT_STOP_DISTANCE - frontGap) / FRONT_STOP_DISTANCE;
+    }
+    setMotor(leftSpeed, MOTOR_BASED_SPEED + TURNING_GEAR_BOOST + turnBoost);
     Serial.print("Turning Left. Front Gap: ");
     Serial.print(frontGap);
     Serial.print(" cm, Turn Boost: ");
     Serial.print(turnBoost);
-    Serial.println(" cm");
+    Serial.print(" cm, Left Speed: ");
+    Serial.println(leftSpeed);
     delay(TURNING_STOP_TIME);
     // stopMotor();
 }
 
 void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
-    bool status = frontDistance >= FRONT_SAFE_DISTANCE;
+    bool status = checkObstacle(frontDistance);
     if (turning) {
         unsigned long elapsed = millis() - start;
-        if (elapsed <= MIN_TURN_TIME) {
-            TurnLeft(frontDistance, rightDistance);
-            return ;
-        }
         if (elapsed >= MAX_TURN_TIME) {
             turning = false;
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
+            delay(TURNING_STOP_TIME * 3);
             return ;
         }
         if (status) {
             turning = false;
             return ;
         }
-        TurnLeft(frontDistance, rightDistance);
+        TurnLeft(frontDistance);
         return ;
     }
-    if (status) {
+    if (!status) {
+        // Need to turn left
+        turning = true;
+        start = millis();
+        TurnLeft(frontDistance);
+    } else {
         MoveStraight(rightDistance);
-        return ;
     }
-    // Need to turn left
-    turning = true;
-    start = millis();
-    TurnLeft(frontDistance, rightDistance);
 }
 
 void loop() {
     //get the distance from sonar
-    NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); 
-    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
+    NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
+    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
     unsigned int frontDistance = getSonarDistance(sonarFront);
     unsigned int rightDistance = getSonarDistance(sonarRight);
     Serial.print("Front Distance: ");

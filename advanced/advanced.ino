@@ -13,8 +13,8 @@
 #define MOTOR_BASED_SPEED 180
 #define MOTOR_MAX_SPEED 255
 #define MOTOR_MIN_SPEED 130
-#define BASED_DIFFERENT_GEAR 20
-#define LEFT_STRAIGHT_DIFFERENT_GEAR 30
+#define BASED_DIFFERENT_GEAR 30
+#define LEFT_STRAIGHT_DIFFERENT_GEAR 40
 #define RIGHT_STRAIGHT_DIFFERENT_GEAR 10
 #define TURNING_DIFFERENT_GEAR 50
 #define TURNING_GEAR_BOOST 50
@@ -57,6 +57,17 @@ bool turning = false;
 unsigned long lastCorrectionMs = 0;
 bool correctionNeeded = false;
 
+// Drift velocity tracking for smarter correction
+int lastRightDistance = -1; // -1 means not initialized
+unsigned long lastMeasureTime = 0;
+float driftVelocity = 0.0; // cm/s, positive = drifting away from right shore
+
+// Turn angle tracking for precise turning (避免过度转向)
+float estimatedTurnAngle = 0.0; // degrees
+unsigned int turnStartRightDist = 0;
+unsigned int maxRightDistDuringTurn = 0; // peak distance when leaving old wall
+int turnPhase = 0; // 0=not turning, 1=leaving wall, 2=in corner, 3=approaching new wall
+
 void setup() {
     //Setup motor pins
     pinMode(R_PWM, OUTPUT);
@@ -76,6 +87,41 @@ void setup() {
 unsigned int readRightDistance() {
     NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
     return getSonarDistance(sonarRight);
+}
+
+// Estimate turn angle based on right distance pattern during turning
+float estimateTurnAngleFromDistance(unsigned int currentRight, unsigned int startRight, unsigned int maxRight) {
+    // Method: detect turn phases by right distance pattern
+    // Phase 1: distance increasing (leaving old wall)
+    // Phase 2: distance at max (in corner area)
+    // Phase 3: distance decreasing (approaching new wall)
+    
+    float angle = 0.0;
+    
+    if (maxRight > startRight + 20) {
+        // We've left the old wall significantly
+        float phase1Progress = min(1.0, (maxRight - startRight) / 50.0);
+        angle += phase1Progress * 45.0; // first 45 degrees
+        
+        // If now approaching new wall (distance decreasing from peak)
+        if (currentRight < maxRight - 10) {
+            float phase3Progress = min(1.0, (maxRight - currentRight) / 40.0);
+            angle += phase3Progress * 45.0; // additional 45 degrees
+        }
+    }
+    
+    return angle;
+}
+
+// Check if turn is complete based on multiple criteria
+bool isTurnComplete(unsigned int frontDist, unsigned int rightDist, float turnAngle, unsigned long turnTime) {
+    bool frontClear = frontDist >= FRONT_SAFE_DISTANCE;
+    bool angleAdequate = turnAngle >= 60.0; // turned at least 60 degrees
+    bool rightReasonable = (rightDist >= SAFE_DISTANCE - 15) && (rightDist <= SAFE_DISTANCE + 50);
+    bool timeout = turnTime >= MAX_TURN_TIME;
+    
+    // Complete if: (front clear AND angle adequate) OR (front clear AND right aligned) OR timeout
+    return (frontClear && angleAdequate) || (frontClear && rightReasonable) || timeout;
 }
 
 // After a lateral correction, realign bow so the sensor faces perpendicular to shore
@@ -214,110 +260,225 @@ int checkObstacle(const unsigned int frontDistance) {
 
 // Move the ship based on the sonar distances
 void MoveStraight(const unsigned int rightDistance) {
-
+    unsigned long nowMs = millis();
     int errorDistance = getErrorDistance(rightDistance);
-    Serial.print("Error Distance: ");
+    
+    // Calculate drift velocity
+    if (lastRightDistance >= 0 && lastMeasureTime > 0) {
+        unsigned long timeDiff = nowMs - lastMeasureTime;
+        if (timeDiff > 0) {
+            // Positive drift = moving away from right shore (right distance increasing)
+            driftVelocity = ((float)(rightDistance - lastRightDistance) * 1000.0) / timeDiff; // cm/s
+        }
+    }
+    
+    // Update tracking variables
+    lastRightDistance = rightDistance;
+    lastMeasureTime = nowMs;
+    
+    Serial.print("Error: ");
     Serial.print(errorDistance);
-    Serial.println(" cm");
+    Serial.print(" cm, Drift: ");
+    Serial.print(driftVelocity, 2);
+    Serial.println(" cm/s");
     
     // Check if within acceptable band
     bool withinBand = (errorDistance >= -LEFT_TOLERANT_DISTANCE) && (errorDistance <= RIGHT_TOLERANT_DISTANCE);
     
+    // Determine if we're moving toward safety zone (self-correcting)
+    bool movingTowardSafety = false;
+    if (errorDistance > 0 && driftVelocity < -0.5) {
+        // Too far, but drifting back toward shore - self-correcting
+        movingTowardSafety = true;
+    } else if (errorDistance < 0 && driftVelocity > 0.5) {
+        // Too close, but drifting away from shore - self-correcting
+        movingTowardSafety = true;
+    }
+    
     if (withinBand) {
-        // Already aligned, go straight with slight right bias to maintain course
-        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
-        delay(STRAIGHT_STOP_TIME);
-        Serial.println("[MoveStraight] Go Straight (aligned)");
-        correctionNeeded = false;
-    } else {
-        // Out of tolerance band - check cooldown to prevent rapid alternation
-        unsigned long nowMs = millis();
-        unsigned long timeSinceCorrection = nowMs - lastCorrectionMs;
-        
-        if (timeSinceCorrection < CORRECTION_COOLDOWN_MS && !correctionNeeded) {
-            // Still in cooldown period, hold steady without new correction
+        // Within tolerance band
+        if (abs(driftVelocity) < 1.0) {
+            // Stable, go straight
             setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
             delay(STRAIGHT_STOP_TIME);
-            Serial.println("[MoveStraight] Cooldown: hold straight");
+            Serial.println("[MoveStraight] Stable - straight");
+            correctionNeeded = false;
+        } else {
+            // Within band but drifting - apply gentle preemptive correction
+            int gentleGear = BASED_DIFFERENT_GEAR / 2;
+            if (driftVelocity > 1.0) {
+                // Drifting away, gently turn right
+                setMotor(MOTOR_BASED_SPEED + gentleGear, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+                Serial.println("[MoveStraight] Preempt drift right");
+            } else {
+                // Drifting toward shore, gently turn left
+                setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR + gentleGear);
+                Serial.println("[MoveStraight] Preempt drift left");
+            }
+            delay(STRAIGHT_STOP_TIME);
+        }
+    } else {
+        // Out of tolerance band
+        unsigned long timeSinceCorrection = nowMs - lastCorrectionMs;
+        
+        if (movingTowardSafety && timeSinceCorrection < CORRECTION_COOLDOWN_MS * 2) {
+            // Self-correcting, don't interfere - let momentum work
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+            delay(STRAIGHT_STOP_TIME);
+            Serial.println("[MoveStraight] Self-correcting - hold");
             return;
         }
         
-        // Apply correction
+        if (timeSinceCorrection < CORRECTION_COOLDOWN_MS && !correctionNeeded) {
+            // Cooldown period
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+            delay(STRAIGHT_STOP_TIME);
+            Serial.println("[MoveStraight] Cooldown");
+            return;
+        }
+        
+        // Calculate correction gear with drift velocity consideration
         int gear = (errorDistance > 0) ? RIGHT_STRAIGHT_DIFFERENT_GEAR : LEFT_STRAIGHT_DIFFERENT_GEAR;
-        int differentGear = getDifferentGear(abs(errorDistance), gear, SAFE_DISTANCE);
-        Serial.print("Different Gear: ");
-        Serial.println(differentGear);
+        int baseGear = getDifferentGear(abs(errorDistance), gear, SAFE_DISTANCE);
+        
+        // Adjust gear based on drift velocity (amplify if drifting wrong way, reduce if drifting right way)
+        float driftFactor = 1.0;
+        if (errorDistance > 0) {
+            // Too far from shore
+            if (driftVelocity > 1.0) {
+                // Drifting further away - increase correction
+                driftFactor = 1.3 + min(abs(driftVelocity) / 10.0, 0.5);
+            } else if (driftVelocity < -1.0) {
+                // Already drifting back - reduce correction
+                driftFactor = 0.6;
+            }
+        } else {
+            // Too close to shore
+            if (driftVelocity < -1.0) {
+                // Drifting closer - increase correction
+                driftFactor = 1.3 + min(abs(driftVelocity) / 10.0, 0.5);
+            } else if (driftVelocity > 1.0) {
+                // Already drifting away - reduce correction
+                driftFactor = 0.6;
+            }
+        }
+        
+        int differentGear = (int)(baseGear * driftFactor);
+        differentGear = constrain(differentGear, 0, gear);
+        
+        Serial.print("Gear: ");
+        Serial.print(differentGear);
+        Serial.print(", Factor: ");
+        Serial.println(driftFactor, 2);
         
         if (errorDistance > 0) {
-            // Too far from right shore, turn right (away from shore)
+            // Too far, turn right
             setMotor(MOTOR_BASED_SPEED + differentGear, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
             Serial.println("[MoveStraight] Correct Right");
         } else {
-            // Too close to left shore, turn left (away from shore)
+            // Too close, turn left
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR + differentGear);
             Serial.println("[MoveStraight] Correct Left");
-            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + differentGear);
         }
         
         delay(ADAPTATION_STOP_TIME);
         
-        // Hold steady after correction to let ship settle
+        // Shorter stability hold to check results quickly
         setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
-        delay(CORRECTION_STABILITY_TIME);
-        Serial.println("[MoveStraight] Stability hold");
+        delay(CORRECTION_STABILITY_TIME / 2);
         
-        // Mark that a correction was just applied
         correctionNeeded = true;
         lastCorrectionMs = millis();
         
-        // Only align heading if error is significant (avoid over-tuning)
-        if (abs(errorDistance) > LEFT_TOLERANT_DISTANCE + 15) {
+        // Only align heading if error is large AND drift is significant
+        if (abs(errorDistance) > LEFT_TOLERANT_DISTANCE + 20 && abs(driftVelocity) > 2.0) {
             AlignHeading();
         }
     }
 }
 
 
-// Adaptive left turn that keeps pivoting until front is clear and right distance is reasonable
-void TurnLeft(const unsigned int frontDistance) {
-    int frontGap = FRONT_SAFE_DISTANCE - (int)frontDistance; // >0 means still too close in front
+// Adaptive left turn with angle tracking to prevent over-turning
+void TurnLeft(const unsigned int frontDistance, const unsigned int rightDistance) {
+    unsigned long elapsed = millis() - start;
+    
+    // Update turn phase based on right distance pattern
+    if (turnPhase == 1 && rightDistance > maxRightDistDuringTurn) {
+        maxRightDistDuringTurn = rightDistance; // still leaving wall
+    } else if (turnPhase == 1 && rightDistance < maxRightDistDuringTurn - 5) {
+        turnPhase = 2; // peaked, now in corner
+    } else if (turnPhase == 2 && rightDistance < SAFE_DISTANCE + 30) {
+        turnPhase = 3; // approaching new wall
+    }
+    
+    // Estimate turn angle
+    estimatedTurnAngle = estimateTurnAngleFromDistance(rightDistance, turnStartRightDist, maxRightDistDuringTurn);
+    
+    // Add time-based estimation for robustness
+    float timeBasedAngle = (elapsed / 1000.0) * 30.0; // assume ~30 deg/sec turn rate
+    estimatedTurnAngle = (estimatedTurnAngle + timeBasedAngle) / 2.0; // average both methods
+    
+    // Calculate turn speed based on front distance and turn progress
+    int frontGap = FRONT_SAFE_DISTANCE - (int)frontDistance;
     int turnBoost = (abs(frontGap) * (MOTOR_MAX_SPEED - MOTOR_BASED_SPEED - TURNING_GEAR_BOOST)) / FRONT_STOP_DISTANCE;
+    
+    // Reduce turn speed as we approach target angle (avoid over-turning)
+    if (estimatedTurnAngle > 50.0) {
+        float slowdownFactor = max(0.3, 1.0 - (estimatedTurnAngle - 50.0) / 40.0);
+        turnBoost = (int)(turnBoost * slowdownFactor);
+    }
+    
     int leftSpeed = 0;
     if (frontGap < FRONT_STOP_DISTANCE) {
         leftSpeed = MOTOR_MIN_SPEED * (FRONT_STOP_DISTANCE - frontGap) / FRONT_STOP_DISTANCE;
     }
+    
     setMotor(leftSpeed, MOTOR_BASED_SPEED + TURNING_GEAR_BOOST + turnBoost);
-    Serial.print("Turning Left. Front Gap: ");
-    Serial.print(frontGap);
-    Serial.print(" cm, Turn Boost: ");
-    Serial.print(turnBoost);
-    Serial.print(" cm, Left Speed: ");
-    Serial.println(leftSpeed);
+    
+    Serial.print("[Turn] Angle: ");
+    Serial.print(estimatedTurnAngle, 1);
+    Serial.print("°, Phase: ");
+    Serial.print(turnPhase);
+    Serial.print(", Front: ");
+    Serial.print(frontDistance);
+    Serial.print(", Right: ");
+    Serial.print(rightDistance);
+    Serial.print(", Boost: ");
+    Serial.println(turnBoost);
+    
     delay(TURNING_STOP_TIME);
-    // stopMotor();
 }
 
 void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
     bool status = checkObstacle(frontDistance);
     if (turning) {
         unsigned long elapsed = millis() - start;
-        if (elapsed >= MAX_TURN_TIME) {
+        
+        // Check if turn is complete using intelligent criteria
+        if (isTurnComplete(frontDistance, rightDistance, estimatedTurnAngle, elapsed)) {
             turning = false;
-            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
-            delay(TURNING_STOP_TIME * 3);
-            return ;
+            turnPhase = 0;
+            estimatedTurnAngle = 0.0;
+            Serial.println("[Turn Complete]");
+            // Brief straight movement to stabilize
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + BASED_DIFFERENT_GEAR);
+            delay(100);
+            return;
         }
-        if (status) {
-            turning = false;
-            return ;
-        }
-        TurnLeft(frontDistance);
-        return ;
+        
+        TurnLeft(frontDistance, rightDistance);
+        return;
     }
     if (!status) {
-        // Need to turn left
+        // Need to turn left - initialize turn tracking
         turning = true;
         start = millis();
-        TurnLeft(frontDistance);
+        turnStartRightDist = rightDistance;
+        maxRightDistDuringTurn = rightDistance;
+        turnPhase = 1; // starting turn
+        estimatedTurnAngle = 0.0;
+        Serial.println("[Turn Start]");
+        TurnLeft(frontDistance, rightDistance);
     } else {
         MoveStraight(rightDistance);
     }
