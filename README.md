@@ -8,6 +8,13 @@
 
 - **直线行驶任务** (`task_straight.ino`): 控制无人船在水池中保持直线前进，避免障碍物。
 - **绕圈行驶任务** (`task_turning.ino`): 控制无人船在水池中绕圈行驶。
+
+## 程序逻辑框图
+
+查看 `task_turning.ino` 的程序逻辑框图：
+
+- [PNG 图片](docs/diagrams/task_turning_main.png)
+- [SVG 图片](docs/diagrams/task_turning_main.svg)
 - **标准测试程序** (`test.ino`): 用于测试硬件和基本功能。
 - 使用NewPing库进行超声波测距。
 - 双电机驱动系统，支持前进、转向和停止。
