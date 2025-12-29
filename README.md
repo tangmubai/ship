@@ -25,6 +25,11 @@
 ship/
 ├── LICENSE                   # 许可证
 ├── README.md                 # 项目说明文档
+├── docs/
+│   ├── task_turning_flowchart.md  # 程序逻辑框图文档
+│   └── diagrams/
+│       ├── task_turning_main.png  # 程序逻辑框图 PNG
+│       └── task_turning_main.svg  # 程序逻辑框图 SVG
 ├── lib/
 │   └── README.md            # 库文件说明
 ├── task_straight/
