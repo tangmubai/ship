@@ -79,17 +79,10 @@ void setup() {
   Serial.println("Diamond motor test Ready");
 }
 
-
-
 void loop() {
-  // put your main code here, to run repeatedly:
-  // for (int speed = 150; speed <= 255; speed++) {
-  //   Serial.print("Setting motors to speed: ");
-  //   Serial.println(speed);
-  //   setMotors(spe;;;;;;;;;;...................../ed, speed);
-  //   delay(200);
-  // }
-  setMotors(0, 255);
-  // stopMotors();
+  setMotors(255, 255);
+  setMotors(-255, -255);
+  delay(200);
+  stopMotors();
 }
 

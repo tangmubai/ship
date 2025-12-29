@@ -12,24 +12,7 @@
 //Set the speed of motor
 #define MOTOR_BASED_SPEED 250
 #define MOTOR_MAX_SPEED 255
-#define BASED_DIFFERENT_GEAR 80
-
-// Set the front sensor pin
-// #define FRONT_TRIGGER_PIN 11
-// #define FRONT_ECHO_PIN 12
-// Set the right sensor pin
-#define RIGHT_TRIGGER_PIN 3
-#define RIGHT_ECHO_PIN 2
-
-//Set the distance of sensor
-#define SAFE_DISTANCE 20 // in cm
-#define MAX_DISTANCE 200 // in cm
-#define TOLLRENT_DISTANCE 10 // in cm
-
-// Set the sonar reading parameters
-#define WAIT_TIME 100 // in ms
-#define STOP_TIME 50 // in ms
-#define READ_ROUNDS 5
+#define BASED_DIFFERENT_GEAR 50
 
 void setup() {
     //Setup motor pins
@@ -40,30 +23,12 @@ void setup() {
     pinMode(L_IN2, OUTPUT);
     pinMode(L_IN1, OUTPUT);
     //Stop motors at the beginning
-    // stopMotor();
+    stopMotor();
     //Setup Serial port
     Serial.begin(9600);
     Serial.println("Task Straight Start");
 
 }
-
-// unsigned int getSonarDistance(NewPing &sonar) {
-//     unsigned int sumDistance = 0;
-//     int vailadReadings = 0;
-//     for (int i = 0; i < READ_ROUNDS; i++) {
-//         unsigned int distance = sonar.ping_cm();
-//         if (distance >= 0) {
-//             sumDistance += distance;
-//             vailadReadings++;
-//         }
-//         delay(WAIT_TIME); //Short delay between readings
-//     }
-//     int distance = -1;
-//     if (vailadReadings > 0) {
-//         distance = sumDistance / vailadReadings;
-//     }
-//     return distance;
-// }
 
 // Set motor direction
 int setMotorSpeed(const int pin1, const int pin2, const int PMW, const int speed) {
@@ -108,59 +73,6 @@ void setMotor(const int left_speed, const int right_speed) {
     Serial.println(rightSpeed);
 }
 
-// Get the error distance from the safe distance
-// int getErrorDistance(const unsigned int Distance){
-//     return Distance - SAFE_DISTANCE;
-// }
-
-// Get different gear based on the error distance
-// int getDifferentGear(const int errorDistance) {
-//     int differentGear = (errorDistance * BASED_DIFFERENT_GEAR) / SAFE_DISTANCE;
-//     if (differentGear > BASED_DIFFERENT_GEAR) {
-//         differentGear = BASED_DIFFERENT_GEAR;
-//     }
-//     return differentGear;
-// }
-
-// Check if there is an obstacle in front of the ship
-// bool checkObstacle(const unsigned int frontDistance) {
-//     if ((frontDistance > 0 && frontDistance < SAFE_DISTANCE)) return true;
-//     return false;
-// }
-
-// Move the ship based on the sonar distances
-void Move() {
-    // for (int speed = 150; speed <= MOTOR_MAX_SPEED; speed++) {
-    //     Serial.print("Setting motors to speed: ");
-    //     Serial.println(speed);
-    //     setMotor(speed, speed);
-    //     delay(200);
-    // }
-    while (true) {
-        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED);
-    }
-    stopMotor();
-}
-
 void loop() {
-    //get the distance from sonar
-    // NewPing sonarFront(FRONT_TRIGGER_PIN, FRONT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
-    // NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance. 
-    // unsigned int frontDistance = getSonarDistance(sonarFront);
-    // unsigned int rightDistance = getSonarDistance(sonarRight);
-    // Serial.print(frontDistance);
-    // Serial.print(" cm\t");
-    // Serial.print("Right Distance: ");
-    // Serial.print(rightDistance);
-    // Serial.println(" cm");
-    //If the front distance is less than safe distance, need to avoid obstacle
-    // if (checkObstacle(frontDistance)) {
-    //     Serial.println("Obstacle Detected");
-    //     stopMotor();
-    //     delay(STOP_TIME);
-    //     return ;
-    // }
-    Move();
-    stopMotor();
-    delay(STOP_TIME);
+    setMotor(MOTOR_BASED_SPEED - BASED_DIFFERENT_GEAR, MOTOR_BASED_SPEED);
 }

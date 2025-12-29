@@ -9,6 +9,13 @@
 #define R_IN3 4
 #define R_IN4 5
 
+// Set the front sensor pin
+#define FRONT_TRIGGER_PIN 13
+#define FRONT_ECHO_PIN 12
+// Set the right sensor pin
+#define RIGHT_TRIGGER_PIN 10
+#define RIGHT_ECHO_PIN 9
+
 //Set the speed of motor
 #define MOTOR_BASED_SPEED 180
 #define MOTOR_MAX_SPEED 255
@@ -28,13 +35,6 @@
 #define CORRECTION_COOLDOWN_MS 200 // min spacing between corrections (prevent rapid alternation)
 #define CORRECTION_STABILITY_TIME 50 // hold steady after correction to let ship settle
 
-// Set the front sensor pin
-#define FRONT_TRIGGER_PIN 13
-#define FRONT_ECHO_PIN 12
-// Set the right sensor pin
-#define RIGHT_TRIGGER_PIN 10
-#define RIGHT_ECHO_PIN 9
-
 //Set the distance of sensor
 #define FRONT_SAFE_DISTANCE 120 // in cm
 #define FRONT_STOP_DISTANCE 90 // in cm
@@ -43,13 +43,12 @@
 #define LEFT_TOLERANT_DISTANCE 25 // in cm
 #define RIGHT_TOLERANT_DISTANCE 35 // in cm
 
-#define MAX_TURN_TIME 3000 // in ms
-
 // Set the sonar reading parameters
 #define WAIT_TIME 5 // in ms
 #define STRAIGHT_STOP_TIME 80 // in ms
 #define ADAPTATION_STOP_TIME 80 // in ms
 #define TURNING_STOP_TIME 20 // in ms
+#define MAX_TURN_TIME 3000 // in ms
 #define READ_ROUNDS 5
 
 unsigned long start;
@@ -70,40 +69,6 @@ void setup() {
     //Setup Serial port
     Serial.begin(9600);
     Serial.println("Task Turning Start");
-}
-
-// Helper: read right distance quickly using same filtering
-unsigned int readRightDistance() {
-    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
-    return getSonarDistance(sonarRight);
-}
-
-// After a lateral correction, realign bow so the sensor faces perpendicular to shore
-void AlignHeading() {
-    for (int i = 0; i < HEADING_MAX_ITERATIONS; i++) {
-        // Run straight briefly and measure derivative of right distance
-        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_DIFFERENT_GEAR);
-        unsigned int r1 = readRightDistance();
-        delay(HEADING_ALIGN_STEP_TIME);
-        unsigned int r2 = readRightDistance();
-        int delta = (int)r2 - (int)r1; // >0: bow yawing outward, <0: inward
-        Serial.print("[AlignHeading] dRight: ");
-        Serial.println(delta);
-        if (abs(delta) <= HEADING_DERIVATIVE_TOLERANCE) {
-            // heading is sufficiently parallel to shore
-            break;
-        }
-        if (delta > 0) {
-            // Right distance increasing -> rotate right a bit to face inward
-            setMotor(MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET, MOTOR_BASED_SPEED);
-        } else {
-            // Right distance decreasing -> rotate left a bit to face outward
-            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET);
-        }
-        delay(HEADING_ALIGN_STEP_TIME);
-    }
-    lastCorrectionMs = millis();
-    correctionNeeded = false;
 }
 
 // Get the distance from sonar using median filter
@@ -151,6 +116,12 @@ unsigned int getSonarDistance(NewPing &sonar) {
     }
     
     return median;
+}
+
+// Helper: read right distance quickly using same filtering
+unsigned int readRightDistance() {
+    NewPing sonarRight(RIGHT_TRIGGER_PIN, RIGHT_ECHO_PIN, MAX_DISTANCE);
+    return getSonarDistance(sonarRight);
 }
 
 // Set motor direction
@@ -207,9 +178,32 @@ int getDifferentGear(const int errorDistance, const int differentGear, const int
     return calculatedGear;
 }
 
-// Check if there is an obstacle in front of the ship
-int checkObstacle(const unsigned int frontDistance) {
-    return frontDistance >= FRONT_SAFE_DISTANCE ? 1 : 0; // 1: clear, 0: obstacle
+// After a lateral correction, realign bow so the sensor faces perpendicular to shore
+void AlignHeading() {
+    for (int i = 0; i < HEADING_MAX_ITERATIONS; i++) {
+        // Run straight briefly and measure derivative of right distance
+        setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_DIFFERENT_GEAR);
+        unsigned int r1 = readRightDistance();
+        delay(HEADING_ALIGN_STEP_TIME);
+        unsigned int r2 = readRightDistance();
+        int delta = (int)r2 - (int)r1; // >0: bow yawing outward, <0: inward
+        Serial.print("[AlignHeading] dRight: ");
+        Serial.println(delta);
+        if (abs(delta) <= HEADING_DERIVATIVE_TOLERANCE) {
+            // heading is sufficiently parallel to shore
+            break;
+        }
+        if (delta > 0) {
+            // Right distance increasing -> rotate right a bit to face inward
+            setMotor(MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET, MOTOR_BASED_SPEED);
+        } else {
+            // Right distance decreasing -> rotate left a bit to face outward
+            setMotor(MOTOR_BASED_SPEED, MOTOR_BASED_SPEED + HEADING_ADJUST_OFFSET);
+        }
+        delay(HEADING_ALIGN_STEP_TIME);
+    }
+    lastCorrectionMs = millis();
+    correctionNeeded = false;
 }
 
 // Move the ship based on the sonar distances
@@ -297,7 +291,7 @@ void TurnLeft(const unsigned int frontDistance) {
 }
 
 void Move(const unsigned int frontDistance, const unsigned int rightDistance) {
-    bool status = checkObstacle(frontDistance);
+    bool status = frontDistance >= FRONT_SAFE_DISTANCE;
     if (turning) {
         unsigned long elapsed = millis() - start;
         if (elapsed >= MAX_TURN_TIME) {
@@ -336,5 +330,4 @@ void loop() {
     Serial.print(rightDistance);
     Serial.println(" cm");
     Move(frontDistance, rightDistance);
-    // MoveStraight(rightDistance);
 }
