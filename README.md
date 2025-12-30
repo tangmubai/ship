@@ -15,6 +15,7 @@
 
 - [PNG 图片](docs/diagrams/task_turning_main.png)
 - [SVG 图片](docs/diagrams/task_turning_main.svg)
+- [伪代码文档](docs/task_turning_pseudocode.md)
 - **标准测试程序** (`test.ino`): 用于测试硬件和基本功能。
 - 使用NewPing库进行超声波测距。
 - 双电机驱动系统，支持前进、转向和停止。
@@ -27,6 +28,7 @@ ship/
 ├── README.md                 # 项目说明文档
 ├── docs/
 │   ├── task_turning_flowchart.md  # 程序逻辑框图文档
+│   ├── task_turning_pseudocode.md # 核心逻辑伪代码
 │   └── diagrams/
 │       ├── task_turning_main.png  # 程序逻辑框图 PNG
 │       └── task_turning_main.svg  # 程序逻辑框图 SVG
